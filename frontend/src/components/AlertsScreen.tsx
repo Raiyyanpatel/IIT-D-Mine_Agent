@@ -96,8 +96,27 @@ const parseDescription = (raw: string): { text: string; points: string[] } => {
   };
 };
 
-const isErrorResponse = (raw: string): boolean => {
-  return raw.includes('⚠️ Error:') || raw.includes('429') || raw.includes('quota exceeded');
+const getAnalysisText = (analysis: unknown): string => {
+  if (typeof analysis === 'string') {
+    return analysis.trim();
+  }
+
+  if (analysis && typeof analysis === 'object') {
+    const value = analysis as { answer?: unknown; response?: unknown };
+    if (typeof value.answer === 'string') return value.answer.trim();
+    if (typeof value.response === 'string') return value.response.trim();
+    return JSON.stringify(analysis);
+  }
+
+  return '';
+};
+
+const hasUnavailableAnalysis = (raw: string): boolean => {
+  const normalized = raw.toLowerCase();
+  return normalized.includes('error:')
+    || normalized.includes('credit limit')
+    || normalized.includes('quota exceeded')
+    || /\b(402|429|5\d{2})\b/.test(normalized);
 };
 
 const sampleAlerts: AlertData[] = [
@@ -154,18 +173,17 @@ export const AlertsScreen: React.FC = () => {
         }
         const data = await response.json();
         
-        const parsedAlerts: AlertData[] = data.updates
+        const updates = Array.isArray(data.updates) ? data.updates : [];
+        const parsedAlerts: AlertData[] = updates
           .map((item: any, index: number) => {
-            const rawAnalysis = item.danger_analysis || '';
+            const rawAnalysis = getAnalysisText(item.danger_analysis);
+            const analysisUnavailable = !rawAnalysis || hasUnavailableAnalysis(rawAnalysis);
             
-            // Skip error responses (API quota exceeded, etc.)
-            if (isErrorResponse(rawAnalysis)) {
-              return null;
-            }
-
-            const type = parseRiskLevel(rawAnalysis);
-            const hazardType = parseHazardType(rawAnalysis);
-            const { text, points } = parseDescription(rawAnalysis);
+            const type = analysisUnavailable ? 'info' : parseRiskLevel(rawAnalysis);
+            const hazardType = analysisUnavailable ? 'General Warning' : parseHazardType(rawAnalysis);
+            const { text, points } = analysisUnavailable
+              ? { text: 'Risk analysis is temporarily unavailable. Open the original bulletin for the latest update details.', points: [] }
+              : parseDescription(rawAnalysis);
 
             return {
               id: `live-${index}`,
@@ -177,14 +195,11 @@ export const AlertsScreen: React.FC = () => {
               description: text,
               descriptionPoints: points,
               recommendedActions: [],
-              isError: false
+              isError: analysisUnavailable
             };
-          })
-          .filter(Boolean) as AlertData[];
+          }) as AlertData[];
         
-        if (parsedAlerts.length > 0) {
-          setAlerts([...parsedAlerts, ...sampleAlerts]);
-        }
+        setAlerts([...parsedAlerts, ...sampleAlerts]);
       } catch (error) {
         console.error("Error fetching updates:", error);
       } finally {

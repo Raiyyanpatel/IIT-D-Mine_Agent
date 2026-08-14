@@ -103,7 +103,7 @@ export default function ChatbotPage() {
   const generateAuditReport = async () => {
     try {
       const res = await axios.post(
-        "http://localhost:8000/audit_report_pdf",   // ✅ BACKEND ENDPOINT
+        "https://krishnasimha-mine-agent.hf.space/audit_report_pdf",   // ✅ BACKEND ENDPOINT
         { responseType: "blob" }
       );
 
