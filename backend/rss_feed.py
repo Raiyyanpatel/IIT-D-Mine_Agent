@@ -1,14 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
 from dateutil import parser
 
 # Primary + fallback RSS sources
 RSS_SOURCES = [
-    "https://www.mining.com/feed/",   # often blocked by Cloudflare
+    "https://www.mining.com/feed/",  # often blocked by Cloudflare
     "https://webcache.googleusercontent.com/search?q=cache:https://www.mining.com/feed/",  # Google cache
-    "https://www.miningweekly.com/page/rss",   # reliable alternative
-    "https://www.mining-technology.com/feed/"  # another reliable feed
+    "https://www.miningweekly.com/page/rss",  # reliable alternative
+    "https://www.mining-technology.com/feed/",  # another reliable feed
 ]
 
 # Proper spoofed headers to bypass Cloudflare
@@ -22,6 +21,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.5",
     "Cache-Control": "no-cache",
 }
+
 
 def fetch_dgms_updates(limit: int = 5):
     for src in RSS_SOURCES:
@@ -44,29 +44,17 @@ def fetch_dgms_updates(limit: int = 5):
                 # Parse date safely
                 try:
                     pub_date = parser.parse(pub_date).date().isoformat()
-                except:
+                except Exception:  # noqa: BLE001, S110
                     pass
 
-                updates.append({
-                    "title": title,
-                    "link": link,
-                    "published": pub_date
-                })
+                updates.append({"title": title, "link": link, "published": pub_date})
 
             if updates:
                 return updates
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"⚠️ RSS source failed ({src}): {e}")
             continue
 
     # Final fallback if nothing works
-    return [{
-        "title": "No updates available",
-        "link": "",
-        "published": ""
-    }]
-
-
-
-
+    return [{"title": "No updates available", "link": "", "published": ""}]

@@ -5,7 +5,9 @@ import {
   AlertTriangle, 
   FileText, 
   Menu,
-  X
+  X,
+  Camera,
+  Activity
 } from 'lucide-react';
 import ClickSpark from '../designs/click';
 import { AnimatePresence, motion } from 'motion/react';
@@ -20,6 +22,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ activeTab, setActiveTab })
 
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'vision', label: 'Vision AI', icon: Camera },
+    { id: 'telemetry', label: 'IoT Command', icon: Activity },
     { id: 'chatbot', label: 'AI Chatbot', icon: MessageSquare },
     { id: 'alerts', label: 'Risk Alerts', icon: AlertTriangle },
     { id: 'reports', label: 'Audit Reports', icon: FileText },

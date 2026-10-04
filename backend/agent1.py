@@ -1,13 +1,24 @@
 import os
 import pathlib
-import faiss
-import numpy as np
-import google.generativeai as genai
-from sentence_transformers import SentenceTransformer, CrossEncoder
-from dotenv import load_dotenv
-import pickle
+
+try:
+    import faiss
+
+    HAS_FAISS = True
+except ImportError:
+    HAS_FAISS = False
+    print(
+        "[WARN] FAISS not available in environment; using semantic fallback retrieval."
+    )
+
 import math
+import pickle
 import re
+
+import google.generativeai as genai
+import numpy as np
+from dotenv import load_dotenv
+from sentence_transformers import CrossEncoder, SentenceTransformer
 
 # ---------------------------
 # Setup
@@ -16,11 +27,9 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 VECTORSTORE_PATH = BASE_DIR / "vectorstore"
 load_dotenv()
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    raise ValueError("❌ Missing GOOGLE_API_KEY")
-
-genai.configure(api_key=GOOGLE_API_KEY)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 # ---------------------------
 # Models
@@ -35,16 +44,27 @@ faiss_index_path = VECTORSTORE_PATH / "index.faiss"
 faiss_meta_path = VECTORSTORE_PATH / "index.pkl"
 
 if not faiss_index_path.exists():
-    raise FileNotFoundError("❌ FAISS index not found.")
+    faiss_index_path = BASE_DIR / "index.faiss"
+    faiss_meta_path = BASE_DIR / "index.pkl"
 
-index = faiss.read_index(str(faiss_index_path))
+index = None
+if HAS_FAISS and faiss_index_path.exists():
+    try:
+        index = faiss.read_index(str(faiss_index_path))
+    except Exception as e:  # noqa: BLE001
+        print(f"[WARN] Could not load FAISS index: {e}")
 
 with open(faiss_meta_path, "rb") as f:
     meta = pickle.load(f)
 
 documents = None
 
-if isinstance(meta, list):
+if isinstance(meta, tuple) and len(meta) == 2 and hasattr(meta[0], "search"):
+    docstore, index_to_id = meta
+    documents = [
+        docstore.search(id_val).page_content for id_val in index_to_id.values()
+    ]
+elif isinstance(meta, list):
     documents = meta
 elif isinstance(meta, tuple):
     for item in meta:
@@ -56,9 +76,10 @@ elif isinstance(meta, dict):
     documents = meta.get("documents")
 
 if documents is None:
-    raise TypeError("❌ Could not locate documents in index.pkl")
+    raise TypeError("[ERROR] Could not locate documents in index.pkl")
 
-print(f"✅ Loaded {len(documents)} documents")
+print(f"[OK] Loaded {len(documents)} documents")
+
 
 # ---------------------------
 # Utilities
@@ -66,8 +87,10 @@ print(f"✅ Loaded {len(documents)} documents")
 def embed(text: str):
     return np.array(embed_model.encode([text]), dtype=np.float32)
 
+
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))
+
 
 def clean_text(text: str) -> str:
     text = text.replace("#", "")
@@ -75,30 +98,40 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+
 # ---------------------------
 # FAISS + Re-ranking
 # ---------------------------
 def search_faiss_reranked(query: str, k=5, fetch_k=15):
-    q_emb = embed(query)
-    _, indices = index.search(q_emb, fetch_k)
+    if index is not None:
+        q_emb = embed(query)
+        _, indices = index.search(q_emb, fetch_k)
+        candidates = [
+            documents[i] for i in indices[0] if i != -1 and i < len(documents)
+        ]
+    else:
+        q_words = set(query.lower().split())
+        matched = []
+        for doc in documents:
+            overlap = sum(1 for w in q_words if len(w) > 2 and w in doc.lower())
+            if overlap > 0:
+                matched.append((doc, overlap))
+        matched.sort(key=lambda x: x[1], reverse=True)
+        candidates = [doc for doc, _ in matched[:fetch_k]] or documents[:fetch_k]
 
-    candidates = [documents[i] for i in indices[0] if i != -1]
     if not candidates:
         return [], []
 
     pairs = [(query, doc) for doc in candidates]
     raw_scores = reranker.predict(pairs)
 
-    ranked = sorted(
-        zip(candidates, raw_scores),
-        key=lambda x: x[1],
-        reverse=True
-    )
+    ranked = sorted(zip(candidates, raw_scores), key=lambda x: x[1], reverse=True)
 
     top_docs = [doc for doc, _ in ranked[:k]]
     top_scores = [sigmoid(float(score)) for _, score in ranked[:k]]
 
     return top_docs, top_scores
+
 
 # ---------------------------
 # Confidence Score (0–1)
@@ -110,6 +143,7 @@ def compute_confidence(scores):
     avg_score = sum(scores) / len(scores)
     confidence = 0.7 * max_score + 0.3 * avg_score
     return round(confidence, 3)
+
 
 # ---------------------------
 # RAG Generator
@@ -132,11 +166,10 @@ Documents:
 Answer concisely and factually.
 """
 
-    response = genai.GenerativeModel(
-        "gemini-2.5-flash"
-    ).generate_content(prompt)
+    response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
 
     return response.text
+
 
 # ---------------------------
 # CAG Generator (Fallback)
@@ -154,11 +187,10 @@ Question:
 Provide a careful, assumption-aware answer.
 """
 
-    response = genai.GenerativeModel(
-        "gemini-2.5-flash"
-    ).generate_content(prompt)
+    response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
 
     return response.text
+
 
 # ---------------------------
 # Full Hybrid Pipeline
@@ -167,16 +199,21 @@ def ask(query: str):
     docs, scores = search_faiss_reranked(query, k=5)
     confidence = compute_confidence(scores)
 
+    if not GOOGLE_API_KEY:
+        context_preview = "\n- ".join(docs[:3]) if docs else "No direct DGMS match."
+        return {
+            "answer": f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Note: Set GOOGLE_API_KEY in .env for full Gemini 2.5 Flash conversational synthesis.)*",
+            "confidence": confidence,
+        }
+
     if confidence < 0.55 or not docs:
         raw_answer = generate_answer_cag(query)
     else:
         raw_answer = generate_answer_rag(query, docs)
 
     answer = clean_text(raw_answer)
-    return {
-        "answer": answer,
-        "confidence": confidence
-    }
+    return {"answer": answer, "confidence": confidence}
+
 
 # ---------------------------
 # CLI
@@ -191,7 +228,3 @@ if __name__ == "__main__":
         print(answer)
 
         print("\n📊 Confidence Score:", confidence)
-
-
-
-

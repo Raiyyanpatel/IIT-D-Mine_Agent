@@ -1,12 +1,22 @@
 import os
 import pathlib
-import faiss
-import numpy as np
-import google.generativeai as genai
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
+
+try:
+    import faiss
+
+    HAS_FAISS = True
+except ImportError:
+    HAS_FAISS = False
+    print(
+        "[WARN] FAISS not available in environment; using semantic fallback retrieval."
+    )
+
 import pickle
-import streamlit as st
+
+import google.generativeai as genai
+import numpy as np
+from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 # ---------------------------
 # Setup
@@ -14,12 +24,9 @@ import streamlit as st
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 VECTORSTORE_PATH = BASE_DIR / "vectorstore"
 load_dotenv()
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-if GOOGLE_API_KEY is None:
-    raise ValueError("❌ GOOGLE_API_KEY environment variable is missing!")
-
-genai.configure(api_key=GOOGLE_API_KEY)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 # Embeddings model
 embed_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -31,10 +38,15 @@ faiss_index_path = VECTORSTORE_PATH / "index.faiss"
 faiss_meta_path = VECTORSTORE_PATH / "index.pkl"
 
 if not faiss_index_path.exists():
-    raise FileNotFoundError("❌ FAISS index not found. Run the vectorstore builder first.")
+    faiss_index_path = BASE_DIR / "index.faiss"
+    faiss_meta_path = BASE_DIR / "index.pkl"
 
-# Load FAISS index
-index = faiss.read_index(str(faiss_index_path))
+index = None
+if HAS_FAISS and faiss_index_path.exists():
+    try:
+        index = faiss.read_index(str(faiss_index_path))
+    except Exception as e:  # noqa: BLE001
+        print(f"[WARN] Could not load FAISS index: {e}")
 
 # ------ FIXED, PERMANENT METADATA LOADING ------
 with open(faiss_meta_path, "rb") as f:
@@ -42,11 +54,13 @@ with open(faiss_meta_path, "rb") as f:
 
 documents = None
 
-# 1) Case: meta is a list
-if isinstance(meta, list):
+if isinstance(meta, tuple) and len(meta) == 2 and hasattr(meta[0], "search"):
+    docstore, index_to_id = meta
+    documents = [
+        docstore.search(id_val).page_content for id_val in index_to_id.values()
+    ]
+elif isinstance(meta, list):
     documents = meta
-
-# 2) Case: meta is a tuple → scan inside
 elif isinstance(meta, tuple):
     for item in meta:
         if isinstance(item, list):
@@ -55,36 +69,15 @@ elif isinstance(meta, tuple):
         if isinstance(item, dict) and "documents" in item:
             documents = item["documents"]
             break
-
-# 3) Case: meta is a dict with "documents" key
 elif isinstance(meta, dict):
     if "documents" in meta:
         documents = meta["documents"]
 
-# 4) Deep search fallback
 if documents is None:
-    def find_docs(obj):
-        if isinstance(obj, list) and all(isinstance(x, str) for x in obj):
-            return obj
-        if isinstance(obj, dict):
-            for v in obj.values():
-                found = find_docs(v)
-                if found:
-                    return found
-        if isinstance(obj, tuple):
-            for v in obj:
-                found = find_docs(v)
-                if found:
-                    return found
-        return None
-    documents = find_docs(meta)
+    raise TypeError("[ERROR] Could not locate any list of documents inside index.pkl.")
 
-# 5) If still None → raise error
-if documents is None:
-    raise TypeError("❌ Could not locate any list of documents inside index.pkl. "
-                    "Rebuild the vectorstore.")
+print(f"[OK] Loaded {len(documents)} documents from index.pkl")
 
-print(f"✅ Loaded {len(documents)} documents from index.pkl")
 
 # ---------------------------
 # Utility: Embed a query
@@ -92,14 +85,26 @@ print(f"✅ Loaded {len(documents)} documents from index.pkl")
 def embed(text: str):
     return np.array(embed_model.encode([text]), dtype=np.float32)
 
+
 # ---------------------------
 # RAG Search
 # ---------------------------
 def search_faiss(query: str, k=5):
-    q_emb = embed(query)
-    distances, indices = index.search(q_emb, k)
-    hits = [documents[i] for i in indices[0] if i != -1]
-    return hits
+    if index is not None:
+        q_emb = embed(query)
+        _distances, indices = index.search(q_emb, k)
+        hits = [documents[i] for i in indices[0] if i != -1 and i < len(documents)]
+        return hits
+    else:
+        q_words = set(query.lower().split())
+        matched = []
+        for doc in documents:
+            overlap = sum(1 for w in q_words if len(w) > 2 and w in doc.lower())
+            if overlap > 0:
+                matched.append((doc, overlap))
+        matched.sort(key=lambda x: x[1], reverse=True)
+        return [doc for doc, _ in matched[:k]] or documents[:k]
+
 
 # ---------------------------
 # Generate Final Answer (Gemini)
@@ -122,6 +127,7 @@ Answer concisely, factually, and directly.
     response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
     return response.text
 
+
 # ---------------------------
 # Full RAG Pipeline
 # ---------------------------
@@ -129,6 +135,7 @@ def ask(query: str):
     context_docs = search_faiss(query, k=5)
     answer = generate_answer(query, context_docs)
     return answer
+
 
 # ---------------------------
 # CLI testing
@@ -138,4 +145,3 @@ if __name__ == "__main__":
         q = input("\nAsk me anything about mining: ")
         print("\n🔍 Searching FAISS...")
         print("💬 Answer:", ask(q))
-

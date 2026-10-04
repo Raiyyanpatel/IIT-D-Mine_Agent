@@ -1,0 +1,19 @@
+# Core AI & Vectors
+numpy>=1.24.0
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2
+google-generativeai>=0.8.0
+google-genai>=0.1.0
+python-dotenv>=1.0.0
+
+# Web & API Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+pydantic>=2.0.0
+
+# Document & Image Processing
+reportlab>=4.0.0
+pillow>=10.0.0

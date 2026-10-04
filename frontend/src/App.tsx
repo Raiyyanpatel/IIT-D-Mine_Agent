@@ -10,6 +10,8 @@ import { HomeScreen } from './components/HomeScreen';
 import { ChatScreen } from './components/ChatScreen';
 import { AlertsScreen } from './components/AlertsScreen';
 import { AuditScreen } from './components/AuditScreen';
+import { VisionInspectorScreen } from './components/VisionInspectorScreen';
+import { TelemetryScreen } from './components/TelemetryScreen';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -18,7 +20,11 @@ export default function App() {
   const renderScreen = () => {
     switch (activeTab) {
       case 'home':
-        return <HomeScreen onLaunch={() => setActiveTab('alerts')} />;
+        return <HomeScreen onLaunch={() => setActiveTab('vision')} />;
+      case 'vision':
+        return <VisionInspectorScreen />;
+      case 'telemetry':
+        return <TelemetryScreen />;
       case 'chatbot':
         return <ChatScreen />;
       case 'alerts':
@@ -26,7 +32,7 @@ export default function App() {
       case 'reports':
         return <AuditScreen />;
       default:
-        return <HomeScreen onLaunch={() => setActiveTab('chatbot')} />;
+        return <HomeScreen onLaunch={() => setActiveTab('vision')} />;
     }
   };
 
