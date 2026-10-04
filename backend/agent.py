@@ -124,8 +124,20 @@ Relevant mining documents:
 Answer concisely, factually, and directly.
 """
 
-    response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
-    return response.text
+    if not GOOGLE_API_KEY:
+        context_preview = (
+            "\n- ".join(context_docs[:3]) if context_docs else "No direct DGMS match."
+        )
+        return f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Note: Set GOOGLE_API_KEY in .env for full Gemini 2.5 Flash conversational synthesis.)*"
+
+    try:
+        response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
+        return response.text
+    except Exception as e:  # noqa: BLE001
+        context_preview = (
+            "\n- ".join(context_docs[:3]) if context_docs else "No direct DGMS match."
+        )
+        return f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Gemini API offline: {e})*"
 
 
 # ---------------------------
@@ -142,6 +154,6 @@ def ask(query: str):
 # ---------------------------
 if __name__ == "__main__":
     while True:
-        q = input("\nAsk me anything about mining: ")
-        print("\n🔍 Searching FAISS...")
-        print("💬 Answer:", ask(q))
+        q = input("\n[QUERY] Ask me anything about mining: ")
+        print("\n[SEARCHING FAISS]...")
+        print("[ANSWER]:", ask(q))

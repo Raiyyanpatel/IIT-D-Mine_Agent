@@ -206,10 +206,14 @@ def ask(query: str):
             "confidence": confidence,
         }
 
-    if confidence < 0.55 or not docs:
-        raw_answer = generate_answer_cag(query)
-    else:
-        raw_answer = generate_answer_rag(query, docs)
+    try:
+        if confidence < 0.55 or not docs:
+            raw_answer = generate_answer_cag(query)
+        else:
+            raw_answer = generate_answer_rag(query, docs)
+    except Exception as e:  # noqa: BLE001
+        context_preview = "\n- ".join(docs[:3]) if docs else "No direct DGMS match."
+        raw_answer = f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Gemini API offline: {e})*"
 
     answer = clean_text(raw_answer)
     return {"answer": answer, "confidence": confidence}
@@ -220,11 +224,13 @@ def ask(query: str):
 # ---------------------------
 if __name__ == "__main__":
     while True:
-        q = input("\n🔍 Ask me anything about mining: ")
+        q = input("\n[QUERY] Ask me anything about mining: ")
 
-        answer, confidence = ask(q)
+        res = ask(q)
+        answer = res["answer"]
+        confidence = res["confidence"]
 
-        print("\n💬 Answer:")
+        print("\n[ANSWER]:")
         print(answer)
 
-        print("\n📊 Confidence Score:", confidence)
+        print("\n[CONFIDENCE SCORE]:", confidence)
