@@ -19,7 +19,6 @@ COPY . /app
 RUN mkdir -p /app/storage /app/vectorstore
 ENV DB_PATH="/app/storage/rag_cache.db"
 
-# HuggingFace Spaces uses 7860
-EXPOSE 7860
+EXPOSE 8000 7860
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

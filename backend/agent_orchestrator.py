@@ -13,6 +13,17 @@ if str(_BACKEND_DIR) not in sys.path:
 
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "gpt-4o-mini")
+
+openai_client = None
+if OPENAI_API_KEY:
+    try:
+        from openai import OpenAI
+
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception:  # noqa: BLE001
+        openai_client = None
 
 try:
     from telemetry_service import telemetry_manager
@@ -172,7 +183,26 @@ Provide a direct, authoritative safety response with:
 3. Worker Evacuation & Isolation Protocol (if critical).
 """
 
-    if GOOGLE_API_KEY:
+    final_text = None
+
+    if openai_client:
+        try:
+            resp = openai_client.chat.completions.create(
+                model=DEFAULT_LLM_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are the autonomous Digital Mine Safety Officer under DGMS and CMR 2017.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+            )
+            final_text = (resp.choices[0].message.content or "").strip()
+        except Exception:  # noqa: BLE001
+            final_text = None
+
+    if not final_text and GOOGLE_API_KEY:
         try:
             import google.generativeai as legacy_genai
 
@@ -180,10 +210,9 @@ Provide a direct, authoritative safety response with:
             response = model.generate_content(prompt)
             final_text = response.text.strip()
         except Exception:  # noqa: BLE001
-            final_text = _format_offline_agent_response(
-                user_query, telemetry_findings, statutory_context
-            )
-    else:
+            final_text = None
+
+    if not final_text:
         final_text = _format_offline_agent_response(
             user_query, telemetry_findings, statutory_context
         )

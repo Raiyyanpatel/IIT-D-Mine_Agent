@@ -8,6 +8,17 @@ from PIL import Image
 
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "gpt-4o-mini")
+
+openai_client = None
+if OPENAI_API_KEY:
+    try:
+        from openai import OpenAI
+
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception:  # noqa: BLE001
+        openai_client = None
 
 genai_client = None
 if GOOGLE_API_KEY:
@@ -92,6 +103,44 @@ Respond ONLY in valid JSON matching this schema:
   "summary": "Concise 2-sentence summary of the inspection findings."
 }
 """
+
+    if openai_client:
+        try:
+            import base64
+
+            b64_img = base64.b64encode(image_bytes).decode("utf-8")
+            resp = openai_client.chat.completions.create(
+                model=DEFAULT_LLM_MODEL,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt + "\nRespond with valid JSON only.",
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64_img}"
+                                },
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=1000,
+            )
+            raw = (resp.choices[0].message.content or "").strip()
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0].strip()
+            elif "```" in raw:
+                raw = raw.split("```")[1].split("```")[0].strip()
+            parsed = json.loads(raw)
+            parsed["success"] = True
+            parsed["provider"] = f"OpenAI {DEFAULT_LLM_MODEL} Vision (Live)"
+            return parsed
+        except Exception as e:  # noqa: BLE001
+            print(f"OpenAI vision call failed, trying next provider or fallback: {e}")
 
     if genai_client and GOOGLE_API_KEY:
         try:

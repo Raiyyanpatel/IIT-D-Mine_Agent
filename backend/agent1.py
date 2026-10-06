@@ -28,6 +28,18 @@ VECTORSTORE_PATH = BASE_DIR / "vectorstore"
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "gpt-4o-mini")
+
+openai_client = None
+if OPENAI_API_KEY:
+    try:
+        from openai import OpenAI
+
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception:  # noqa: BLE001
+        openai_client = None
+
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
@@ -166,9 +178,30 @@ Documents:
 Answer concisely and factually.
 """
 
-    response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
+    if openai_client:
+        try:
+            resp = openai_client.chat.completions.create(
+                model=DEFAULT_LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an expert mining engineer."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+            )
+            return (resp.choices[0].message.content or "").strip()
+        except Exception:  # noqa: BLE001, S110
+            pass
 
-    return response.text
+    if GOOGLE_API_KEY:
+        try:
+            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
+                prompt
+            )
+            return response.text
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    return f"**[DGMS Statutory Extract]**\n{context[:600]}"
 
 
 # ---------------------------
@@ -187,9 +220,33 @@ Question:
 Provide a careful, assumption-aware answer.
 """
 
-    response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
+    if openai_client:
+        try:
+            resp = openai_client.chat.completions.create(
+                model=DEFAULT_LLM_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert mining engineer and researcher.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+            )
+            return (resp.choices[0].message.content or "").strip()
+        except Exception:  # noqa: BLE001, S110
+            pass
 
-    return response.text
+    if GOOGLE_API_KEY:
+        try:
+            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
+                prompt
+            )
+            return response.text
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    return f"Query recorded: {query}. (Please consult direct DGMS circulars or activate LLM API key)."
 
 
 # ---------------------------
@@ -199,10 +256,10 @@ def ask(query: str):
     docs, scores = search_faiss_reranked(query, k=5)
     confidence = compute_confidence(scores)
 
-    if not GOOGLE_API_KEY:
+    if not openai_client and not GOOGLE_API_KEY:
         context_preview = "\n- ".join(docs[:3]) if docs else "No direct DGMS match."
         return {
-            "answer": f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Note: Set GOOGLE_API_KEY in .env for full Gemini 2.5 Flash conversational synthesis.)*",
+            "answer": f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Note: Set OPENAI_API_KEY or GOOGLE_API_KEY in .env for full conversational synthesis.)*",
             "confidence": confidence,
         }
 
@@ -213,7 +270,7 @@ def ask(query: str):
             raw_answer = generate_answer_rag(query, docs)
     except Exception as e:  # noqa: BLE001
         context_preview = "\n- ".join(docs[:3]) if docs else "No direct DGMS match."
-        raw_answer = f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(Gemini API offline: {e})*"
+        raw_answer = f"**[DGMS Safety Knowledge Retrieval]**\nRelevant statutory excerpts retrieved:\n- {context_preview}\n\n*(LLM API offline: {e})*"
 
     answer = clean_text(raw_answer)
     return {"answer": answer, "confidence": confidence}

@@ -36,17 +36,17 @@ agent = None
 async def load_agent():
     global agent
     if agent is None:
-        print("🔄 Loading RAG agent...")
+        print("[INFO] Loading RAG agent...")
         try:
             from agent1 import ask
 
             agent = ask
         except Exception as e:  # noqa: BLE001
-            print(f"⚠️ Could not load agent1: {e}")
+            print(f"[WARN] Could not load agent1: {e}")
             from agent import ask
 
             agent = ask
-        print("✅ RAG agent ready.")
+        print("[OK] RAG agent ready.")
 
 
 # -------------------------------------------------------
@@ -357,4 +357,6 @@ async def generate_audit_report_pdf(request: Request):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=7860, reload=True)
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("main:app", host=host, port=port, reload=True)
