@@ -33,7 +33,10 @@ def fetch_dgms_updates(limit: int = 5):
             response = requests.get(src, headers=HEADERS, timeout=10)
             response.raise_for_status()
 
-            soup = BeautifulSoup(response.text, "xml")
+            try:
+                soup = BeautifulSoup(response.text, "xml")
+            except Exception:  # noqa: BLE001
+                soup = BeautifulSoup(response.text, "html.parser")
             items = soup.find_all("item")
 
             if not items:
