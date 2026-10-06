@@ -1,6 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
-from dateutil import parser
+
+try:
+    from dateutil import parser
+except ImportError:
+    parser = None
 
 # Primary + fallback RSS sources
 RSS_SOURCES = [
