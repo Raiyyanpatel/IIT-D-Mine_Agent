@@ -12,17 +12,25 @@ export const AuditScreen: React.FC = () => {
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const response = await fetch('https://krishnasimha-mine-agent.hf.space/audit_report_pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          state: selectedState,
-          year: selectedYear,
-          hazard_type: selectedHazard
-        }),
+      const payload = JSON.stringify({
+        state: selectedState,
+        year: selectedYear,
+        hazard_type: selectedHazard
       });
+
+      let response = await fetch('/audit_report_pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+
+      if (!response.ok) {
+        response = await fetch('https://krishnasimha-mine-agent.hf.space/audit_report_pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

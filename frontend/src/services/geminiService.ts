@@ -1,7 +1,14 @@
 // Backend API Service for Digital Mine Safety Officer (Agentic & Multimodal AI)
 
-const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8000';
-const FALLBACK_URL = 'http://localhost:7860';
+const isLocalDev = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 
+  window.location.port !== '8000';
+
+const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL !== undefined
+  ? (import.meta as any).env.VITE_BACKEND_URL
+  : (isLocalDev ? 'http://localhost:8000' : '');
+
+const FALLBACK_URL = (import.meta as any).env?.VITE_FALLBACK_URL || 'https://krishnasimha-mine-agent.hf.space';
 
 async function fetchWithFallback(endpoint: string, options: RequestInit) {
   try {

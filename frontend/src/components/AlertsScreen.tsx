@@ -167,7 +167,10 @@ export const AlertsScreen: React.FC = () => {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const response = await fetch('https://krishnasimha-mine-agent.hf.space/updates');
+        let response = await fetch('/updates');
+        if (!response.ok) {
+          response = await fetch('https://krishnasimha-mine-agent.hf.space/updates');
+        }
         if (!response.ok) {
           throw new Error('Failed to fetch updates');
         }

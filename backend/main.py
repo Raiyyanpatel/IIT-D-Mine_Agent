@@ -133,8 +133,9 @@ async def cached_ask(query: str):
 # -------------------------------------------------------
 
 
-@app.get("/")
-async def root():
+@app.get("/api")
+@app.get("/api/health")
+async def api_info():
     return {
         "platform": "Digital Mine Safety Officer",
         "version": "2.0.0",
@@ -362,7 +363,22 @@ if not static_dir.exists():
     static_dir = _BACKEND_DIR.parent / "frontend" / "dist"
 
 if static_dir.exists() and (static_dir / "index.html").exists():
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+    if (static_dir / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="static_assets")
+
+    @app.get("/")
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str = ""):
+        if full_path in ("docs", "redoc", "openapi.json"):
+            return None
+        candidate = static_dir / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(static_dir / "index.html"))
+else:
+    @app.get("/")
+    async def root_fallback():
+        return await api_info()
 
 
 if __name__ == "__main__":

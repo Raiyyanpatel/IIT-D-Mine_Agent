@@ -102,10 +102,15 @@ export default function ChatbotPage() {
   // ✅ MANUAL AUDIT REPORT BUTTON
   const generateAuditReport = async () => {
     try {
-      const res = await axios.post(
-        "https://krishnasimha-mine-agent.hf.space/audit_report_pdf",   // ✅ BACKEND ENDPOINT
-        { responseType: "blob" }
-      );
+      let res;
+      try {
+        res = await axios.post("/audit_report_pdf", { responseType: "blob" });
+      } catch {
+        res = await axios.post(
+          "https://krishnasimha-mine-agent.hf.space/audit_report_pdf",
+          { responseType: "blob" }
+        );
+      }
 
       const contentType = res.headers["content-type"];
 
