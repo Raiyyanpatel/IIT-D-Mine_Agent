@@ -228,10 +228,19 @@ export const VisionInspectorScreen: React.FC = () => {
                   <div>
                     <span className="text-xs text-slate-400 uppercase tracking-wider block">Scene Identified</span>
                     <span className="text-base font-bold text-white">{analysisResult.scene_type}</span>
+                    {analysisResult.provider && (
+                      <span className="text-[10px] text-orange-400/80 font-mono block mt-0.5">
+                        • {analysisResult.provider}
+                      </span>
+                    )}
                   </div>
                   <div className={`px-3 py-1.5 rounded-full border text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${getRiskColor(analysisResult.risk_level)}`}>
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    {analysisResult.risk_level} HAZARD
+                    {analysisResult.risk_level === 'SAFE' ? (
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                    )}
+                    {analysisResult.risk_level === 'SAFE' ? 'SAFE / COMPLIANT' : `${analysisResult.risk_level} HAZARD`}
                   </div>
                 </div>
 

@@ -13,7 +13,7 @@ import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -159,12 +159,15 @@ async def api_info():
 # --- 1. RAG Query Endpoint ---
 @app.post("/query")
 async def query_agent(request: Request):
-    data = await request.json()
-    query = data.get("query", "")
-    if not query:
-        return {"response": "⚠️ Query is empty."}
-    response = await cached_ask(query)
-    return {"response": response}
+    try:
+        data = await request.json()
+        query = data.get("query", "").strip()
+        if not query:
+            return {"response": "⚠️ Query is empty. Please enter a mining safety or regulatory inquiry."}
+        response = await cached_ask(query)
+        return {"response": response}
+    except Exception as e:
+        return {"response": f"⚠️ Error processing query: {e!s}"}
 
 
 # --- 2. Multimodal Vision Hazard & PPE Inspector ---
@@ -173,84 +176,105 @@ async def inspect_image_endpoint(
     request: Request,
     file: UploadFile | None = File(None),  # noqa: B008
 ):
-    image_bytes = None
-    filename = "uploaded_inspection.jpg"
+    try:
+        image_bytes = None
+        filename = "uploaded_inspection.jpg"
 
-    if file:
-        image_bytes = await file.read()
-        filename = file.filename or filename
-    elif request:
-        try:
-            body = await request.json()
-            if "image_base64" in body:
-                import base64
+        if file:
+            image_bytes = await file.read()
+            filename = file.filename or filename
+        elif request:
+            try:
+                body = await request.json()
+                if "image_base64" in body:
+                    import base64
 
-                b64_str = body["image_base64"]
-                if "," in b64_str:
-                    b64_str = b64_str.split(",")[1]
-                image_bytes = base64.b64decode(b64_str)
-                filename = body.get("filename", filename)
-        except Exception:  # noqa: BLE001, S110
-            pass
+                    b64_str = body["image_base64"]
+                    if "," in b64_str:
+                        b64_str = b64_str.split(",")[1]
+                    image_bytes = base64.b64decode(b64_str)
+                    filename = body.get("filename", filename)
+            except Exception:  # noqa: BLE001, S110
+                pass
 
-    if not image_bytes:
+        if not image_bytes:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "No image file or base64 data provided."},
+            )
+
+        result = analyze_mine_image(image_bytes, filename=filename)
+        return result
+    except Exception as e:
         return JSONResponse(
-            status_code=400,
-            content={"success": False, "error": "No image file or base64 provided."},
+            status_code=500,
+            content={"success": False, "error": f"Inspection failed: {e!s}"},
         )
-
-    result = analyze_mine_image(image_bytes, filename=filename)
-    return result
 
 
 # --- 3. IoT Real-time Telemetry Endpoints ---
 @app.get("/telemetry/live")
 async def get_live_telemetry():
-    return telemetry_manager.get_live_readings()
+    try:
+        return telemetry_manager.get_live_readings()
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e), "zones": []}
 
 
 @app.post("/telemetry/simulate_spike")
 async def simulate_telemetry_spike(request: Request):
-    data = await request.json()
-    zone_id = data.get("zone_id", "ZONE-2")
-    hazard_type = data.get("hazard_type", "ch4_spike")
-    return telemetry_manager.simulate_anomaly(zone_id, hazard_type)
+    try:
+        data = await request.json()
+        zone_id = data.get("zone_id", "ZONE-2")
+        hazard_type = data.get("hazard_type", "ch4_spike")
+        return telemetry_manager.simulate_anomaly(zone_id, hazard_type)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # --- 4. Agentic AI Decision Core & Tool Orchestration ---
 @app.post("/agent/orchestrate")
 async def orchestrate_agent(request: Request):
-    data = await request.json()
-    query = data.get("query", "")
-    if not query:
-        return {"success": False, "error": "Query required."}
-    return run_agentic_workflow(query)
+    try:
+        data = await request.json()
+        query = data.get("query", "").strip()
+        if not query:
+            return {"success": False, "error": "Query required for safety orchestration."}
+        return run_agentic_workflow(query)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # --- 5. Statutory DGMS Form IV Generator ---
 @app.get("/statutory_form")
 @app.get("/statutory_form/{zone_id}")
 async def get_statutory_form(zone_id: str | None = None):
-    target_zone = zone_id or "District 2: Longwall Face 4"
-    return tool_generate_form_iv(
-        zone_name=target_zone,
-        hazard_type="Inflammable Gas & Strata Separation",
-        severity="CRITICAL",
-        details="Methane concentration reached statutory alert threshold with strata bed separation exceeding 5.0mm.",
-    )
+    try:
+        target_zone = zone_id or "District 2: Longwall Face 4"
+        return tool_generate_form_iv(
+            zone_name=target_zone,
+            hazard_type="Inflammable Gas & Strata Separation",
+            severity="CRITICAL",
+            details="Methane concentration reached statutory alert threshold with strata bed separation exceeding 5.0mm.",
+        )
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/statutory_form")
 async def generate_statutory_form_endpoint(request: Request):
-    data = await request.json()
-    zone_name = data.get("zone_name", "District 2: Longwall Face 4")
-    hazard_type = data.get("hazard_type", "Inflammable Gas & Strata Separation")
-    severity = data.get("severity", "CRITICAL")
-    details = data.get(
-        "details",
-        "Methane concentration reached 1.48% with strata bed separation exceeding 5.0mm.",
-    )
-    return tool_generate_form_iv(zone_name, hazard_type, severity, details)
+    try:
+        data = await request.json()
+        zone_name = data.get("zone_name", "District 2: Longwall Face 4")
+        hazard_type = data.get("hazard_type", "Inflammable Gas & Strata Separation")
+        severity = data.get("severity", "CRITICAL")
+        details = data.get(
+            "details",
+            "Methane concentration reached 1.48% with strata bed separation exceeding 5.0mm.",
+        )
+        return tool_generate_form_iv(zone_name, hazard_type, severity, details)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # --- 6. DGMS Updates Endpoint ---
@@ -300,63 +324,67 @@ async def get_dgms_updates():
 # --- 7. PDF Audit Report Endpoint ---
 @app.post("/audit_report_pdf")
 async def generate_audit_report_pdf(request: Request):
-    data = await request.json()
-    state = data.get("state", "All States")
-    year = data.get("year", "All Years")
-    hazard_type = data.get("hazard_type", "All Hazards")
+    try:
+        data = await request.json()
+        state = data.get("state", "All States")
+        year = data.get("year", "All Years")
+        hazard_type = data.get("hazard_type", "All Hazards")
 
-    prompt = (
-        f"You are a mining safety audit assistant. Using the DGMS mining accident data, "
-        f"generate a detailed safety audit report for:\n\n"
-        f"State: {state}\nYear: {year}\nHazard Type: {hazard_type}\n\n"
-        f"Provide insights on:\n"
-        f"- Number of incidents\n"
-        f"- Categories (gas leak, collapse, fire, machinery, etc.)\n"
-        f"- Severity distribution\n"
-        f"- Root causes\n"
-        f"- Safety recommendations\n"
-        f"- Trends\n"
-        f"Return plain text."
-    )
+        prompt = (
+            f"You are a mining safety audit assistant. Using the DGMS mining accident data, "
+            f"generate a detailed safety audit report for:\n\n"
+            f"State: {state}\nYear: {year}\nHazard Type: {hazard_type}\n\n"
+            f"Provide insights on:\n"
+            f"- Number of incidents\n"
+            f"- Categories (gas leak, collapse, fire, machinery, etc.)\n"
+            f"- Severity distribution\n"
+            f"- Root causes\n"
+            f"- Safety recommendations\n"
+            f"- Trends\n"
+            f"Return plain text."
+        )
 
-    report_text = await cached_ask(prompt)
+        report_text = await cached_ask(prompt)
 
-    pdf_buffer = io.BytesIO()
-    c = canvas.Canvas(pdf_buffer, pagesize=A4)
-    _width, height = A4
+        pdf_buffer = io.BytesIO()
+        c = canvas.Canvas(pdf_buffer, pagesize=A4)
+        _width, height = A4
 
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, height - 50, "🦺 Mining Safety Audit Report")
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, height - 50, "🦺 Mining Safety Audit Report")
 
-    c.setFont("Helvetica", 12)
-    c.drawString(50, height - 80, f"State: {state}")
-    c.drawString(50, height - 100, f"Year: {year}")
-    c.drawString(50, height - 120, f"Hazard Type: {hazard_type}")
+        c.setFont("Helvetica", 12)
+        c.drawString(50, height - 80, f"State: {state}")
+        c.drawString(50, height - 100, f"Year: {year}")
+        c.drawString(50, height - 120, f"Hazard Type: {hazard_type}")
 
-    y = height - 160
-    c.setFont("Helvetica", 11)
+        y = height - 160
+        c.setFont("Helvetica", 11)
 
-    for line in str(report_text).splitlines():
-        while len(line) > 90:
-            part = line[:90]
-            c.drawString(60, y, part)
+        for line in str(report_text).splitlines():
+            while len(line) > 90:
+                part = line[:90]
+                c.drawString(60, y, part)
+                y -= 15
+                line = line[90:]
+            c.drawString(60, y, line)
             y -= 15
-            line = line[90:]
-        c.drawString(60, y, line)
-        y -= 15
-        if y < 50:
-            c.showPage()
-            c.setFont("Helvetica", 11)
-            y = height - 50
+            if y < 50:
+                c.showPage()
+                c.setFont("Helvetica", 11)
+                y = height - 50
 
-    c.save()
-    pdf_buffer.seek(0)
+        c.save()
+        pdf_buffer.seek(0)
 
-    filename = f"Audit_Report_{state.replace(' ', '_')}_{year}.pdf"
-    with open(filename, "wb") as f:  # noqa: ASYNC230
-        f.write(pdf_buffer.getvalue())
-
-    return FileResponse(path=filename, filename=filename, media_type="application/pdf")
+        filename = f"Audit_Report_{state.replace(' ', '_')}_{year}.pdf"
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to generate audit PDF: {e!s}"})
 
 
 # Mount frontend static assets if available (Full-stack container deployment)

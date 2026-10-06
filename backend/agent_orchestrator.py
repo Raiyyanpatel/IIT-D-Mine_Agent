@@ -142,6 +142,19 @@ def run_agentic_workflow(user_query: str) -> dict[str, Any]:
             "zone",
             "district",
             "reading",
+            "status",
+            "live",
+            "current",
+            "ventilation",
+            "airflow",
+            "strata",
+            "roof",
+            "displacement",
+            "extensometer",
+            "fire",
+            "alarm",
+            "hazard",
+            "spike",
         ]
     ):
         telemetry_findings = tool_evaluate_telemetry()
@@ -261,16 +274,35 @@ Provide a direct, authoritative safety response with:
 
 def _format_offline_agent_response(query: str, telemetry: Any, context: str) -> str:
     """Fallback high-fidelity safety directive synthesizer."""
+    critical_notes = []
+    if isinstance(telemetry, dict):
+        if telemetry.get("critical_alerts"):
+            for a in telemetry["critical_alerts"]:
+                critical_notes.append(f"- **ACTIVE SENSOR ALERT**: {a}")
+        if "zones" in telemetry:
+            for z in telemetry["zones"]:
+                if z.get("status") in ["CRITICAL", "HIGH"]:
+                    critical_notes.append(
+                        f"- **{z.get('name', 'Affected Sector')}**: Status is {z.get('status')}. "
+                        f"CH4: {z.get('ch4', 0)}%, CO: {z.get('co', 0)} ppm, Airflow: {z.get('airflow', 0)} m/s, Strata: {z.get('strata_disp', 0)} mm."
+                    )
+
+    active_section = ""
+    if critical_notes:
+        active_section = "**Active Telemetry Alerts Detected:**\n" + "\n".join(critical_notes) + "\n\n"
+
     lines = [
         "**[Digital Mine Safety Officer — Agentic Decision Core]**\n",
-        "**Statutory Assessment (CMR 2017 & DGMS Guidelines):**",
-        "- Under **CMR 2017 Regulation 154 (4)**, whenever the percentage of inflammable gas exceeds 1.25% in the general body of air in any district, the supply of electricity shall be immediately cut off.",
-        "- Under **Mines Act 1952 Section 22**, the manager must forthwith withdraw all workmen from the affected danger sector to a designated fresh air intake refuge station.\n",
-        "**Immediate Operational Directives:**",
-        "1. **Isolate Power Feeder:** Mechanically lock out and tag out (LOTO) all auxiliary transformers feeding the affected district.",
-        "2. **Ventilation Rectification:** Inspect regulator doors, brattice sheets, and auxiliary fan ducting to restore required face air velocity (>= 0.5 m/s).",
-        "3. **Statutory Inspection:** Only the Overman or certified ventilation officer equipped with a DGMS-approved methanometer (flame safety lamp / multi-gas detector) may enter with a safety harness to conduct re-examination.\n",
-        "**Statutory Documentation:**",
+        active_section,
+        "**Statutory Assessment (CMR 2017 & DGMS Guidelines):**\n",
+        "- Under **CMR 2017 Regulation 154 (4)**, whenever the percentage of inflammable gas exceeds 1.25% in the general body of air in any district, the supply of electricity shall be immediately cut off.\n",
+        "- Under **Mines Act 1952 Section 22**, the manager must forthwith withdraw all workmen from the affected danger sector to a designated fresh air intake refuge station.\n\n",
+        "**Immediate Operational Directives:**\n",
+        "1. **Isolate Power Feeder:** Mechanically lock out and tag out (LOTO) all auxiliary transformers feeding the affected district.\n",
+        "2. **Ventilation Rectification:** Inspect regulator doors, brattice sheets, and auxiliary fan ducting to restore required face air velocity (>= 0.5 m/s).\n",
+        "3. **Statutory Inspection:** Only the Overman or certified ventilation officer equipped with a DGMS-approved methanometer (flame safety lamp / multi-gas detector) may enter with a safety harness to conduct re-examination.\n\n",
+        "**Statutory Documentation:**\n",
         "- Record findings in the Shift Sirdar statutory logbook as required by CMR 2017 Regulation 129.",
     ]
-    return "\n".join(lines)
+    return "".join(lines)
+
