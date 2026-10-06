@@ -146,6 +146,10 @@ def _compute_image_features(img: Image.Image) -> dict[str, Any]:
     is_sky = (upper_third[:, :, 2] > upper_third[:, :, 0] + 15) & (upper_third[:, :, 2] > 120)
     sky_ratio = float(np.mean(is_sky))
 
+    # White background ratio (common in architecture diagrams, flowcharts, documents, infographics)
+    is_white = (arr[:, :, 0] > 215) & (arr[:, :, 1] > 215) & (arr[:, :, 2] > 215)
+    white_ratio = float(np.mean(is_white))
+
     return {
         "mean_lum": mean_lum,
         "std_lum": std_lum,
@@ -154,6 +158,7 @@ def _compute_image_features(img: Image.Image) -> dict[str, Any]:
         "b_mean": b_mean,
         "ppe_pixel_ratio": ppe_pixel_ratio,
         "sky_ratio": sky_ratio,
+        "white_ratio": white_ratio,
     }
 
 
@@ -175,50 +180,77 @@ def analyze_mine_image(
         }
 
     prompt = """
-You are an expert Chief Mining Safety Officer & Geotechnical Engineer under Directorate General of Mines Safety (DGMS) standards and Coal Mines Regulations (CMR 2017).
+You are an advanced Multimodal Vision AI system for industrial geotechnical and mining safety inspection under Directorate General of Mines Safety (DGMS) standards and Coal Mines Regulations (CMR 2017).
 
-Analyze the provided mining image thoroughly. Identify:
-1. Primary Scene Type: (Underground Rock Face / Roof & Support / Opencast Bench & Highwall / Machinery & Conveyor / Shaft Entrance & PPE Inspection)
-2. Geotechnical & Structural Hazards:
-   - Visible rock jointing, fracture density, or spalling
-   - Roof sag, pillar crushing, or support deflection
-   - Water seepage, mud ingress, or slip planes
-   - Estimated Rock Mass Rating (RMR) Category: Very Good (81-100), Good (61-80), Fair (41-60), Poor (21-40), Very Poor (<20)
-3. PPE & Human Safety Compliance:
-   - Hard hat / helmet
-   - High-visibility reflective vest
-   - Safety shoes / metatarsal protection
-   - Dust respirator / ear protection
-4. Overall Risk Level: Choose strictly one of: CRITICAL, HIGH, WARNING, SAFE
-5. Statutory DGMS / CMR 2017 Reference: (e.g. Regulation 123 Support Plan, Regulation 118 Highwall Safety, Regulation 198 PPE)
-6. Immediate Action Items: List 3-4 concrete steps the Mining Sirdar / Overman must execute right now.
+CRITICAL FIRST STEP - IMAGE VALIDATION:
+Carefully inspect the provided image:
+- Is this an actual physical mining, quarrying, tunnel, or civil geotechnical excavation site photo?
+- Or is it a non-mining image (such as a software architecture diagram, technical flowchart, UI screenshot, computer screen, text document, indoor office, or unrelated object)?
+
+IF THE IMAGE IS A NON-MINING IMAGE (e.g., Software Architecture Diagram, Flowchart, UI Screenshot, etc.):
+- "scene_type": Accurately identify what the image actually depicts (e.g., "Software System Architecture Diagram (Creator AI)", "Technical Flowchart / Schematic", "UI / Tech Screenshot")
+- "risk_level": "SAFE"
+- "confidence_score": 0.99
+- "geotechnical_analysis": {
+    "detected": false,
+    "fracture_intensity": "None",
+    "water_seepage": "None",
+    "roof_support_condition": "Not Applicable",
+    "rmr_estimate": "N/A (Non-Mining Image)",
+    "hazards_found": []
+  }
+- "ppe_compliance": {
+    "detected": false,
+    "helmet_detected": false,
+    "high_vis_vest_detected": false,
+    "violations": []
+  }
+- "dgms_statutory_reference": "N/A (Non-Mining Image)"
+- "immediate_actions": [
+    "No mining hazards: Uploaded image is a software architecture diagram or digital document.",
+    "Upload a field photograph of an underground face or opencast highwall to conduct strata and PPE audits."
+  ]
+- "summary": Explain clearly and accurately what is depicted in the image (e.g., "The image depicts a software architecture diagram for Creator AI outlining mobile, backend, and cloud components. It is not a mine site photo; no geotechnical hazards or PPE violations apply.")
+
+IF THE IMAGE IS A REAL MINING / GEOTECHNICAL SITE PHOTO:
+- Accurately assess the real visible scene without hallucination:
+  1. Primary Scene Type: (Underground Rock Face / Roof & Support / Opencast Bench & Highwall / Machinery & Conveyor / Shaft Entrance & PPE Inspection)
+  2. Geotechnical & Structural Hazards:
+     - Visible rock jointing, fracture density, or spalling
+     - Roof sag, pillar crushing, or support deflection
+     - Water seepage, mud ingress, or slip planes
+     - Estimated Rock Mass Rating (RMR) Category: Very Good (81-100), Good (61-80), Fair (41-60), Poor (21-40), Very Poor (<20)
+  3. PPE & Human Safety Compliance:
+     - Hard hat / helmet
+     - High-visibility reflective vest
+     - Safety shoes / metatarsal protection
+     - Dust respirator / ear protection
+  4. Overall Risk Level: Choose strictly one of: CRITICAL, HIGH, WARNING, SAFE
+  5. Statutory DGMS / CMR 2017 Reference: (e.g. Regulation 123 Support Plan, Regulation 106 Highwall Safety, Regulation 190 PPE)
+  6. Immediate Action Items: List 3-4 concrete steps the Mining Sirdar / Overman must execute right now.
 
 Respond ONLY in valid JSON matching this schema:
 {
   "scene_type": "string",
   "risk_level": "CRITICAL" | "HIGH" | "WARNING" | "SAFE",
-  "confidence_score": 0.85,
+  "confidence_score": 0.95,
   "geotechnical_analysis": {
-    "detected": true,
-    "fracture_intensity": "Low" | "Medium" | "High" | "Severe",
+    "detected": boolean,
+    "fracture_intensity": "Low" | "Medium" | "High" | "Severe" | "None",
     "water_seepage": "None" | "Damp" | "Dripping" | "Flowing",
     "roof_support_condition": "Adequate" | "Substandard" | "Failing" | "Not Applicable",
-    "rmr_estimate": "Fair (45/100)",
-    "hazards_found": ["hazard 1", "hazard 2"]
+    "rmr_estimate": "string",
+    "hazards_found": ["string"]
   },
   "ppe_compliance": {
-    "detected": true,
-    "helmet_detected": true,
-    "high_vis_vest_detected": true,
-    "violations": ["Missing dust respirator in active face"]
+    "detected": boolean,
+    "helmet_detected": boolean,
+    "high_vis_vest_detected": boolean,
+    "violations": ["string"]
   },
-  "dgms_statutory_reference": "CMR 2017 Regulation 123 (Systematic Support Rules)",
-  "immediate_actions": [
-    "Halt active extraction within 15 meters of the fractured roof span",
-    "Erect additional quick-setting hydraulic props or roof bolts as per SSR",
-    "Log incident in statutory Shift Sirdar inspection book"
-  ],
-  "summary": "Concise 2-sentence summary of the inspection findings."
+  "dgms_statutory_reference": "string",
+  "immediate_actions": ["string"],
+  "summary": "string"
 }
 """
 
@@ -235,6 +267,39 @@ Respond ONLY in valid JSON matching this schema:
     # 3. Intelligent Geotechnical & PPE Visual Engine (Offline / Standalone Mode)
     features = _compute_image_features(img)
     fname_lower = filename.lower()
+
+    # Check if the image is a software diagram / chart / digital graphic
+    is_diagram_name = any(k in fname_lower for k in ["diagram", "architecture", "flowchart", "schematic", "chart", "system", "screenshot", "creator", "tech"])
+    is_diagram_visual = features["white_ratio"] > 0.30 or (features["mean_lum"] > 200 and features["std_lum"] > 35)
+
+    if is_diagram_name or is_diagram_visual:
+        return {
+            "success": True,
+            "provider": "DGMS Safety Vision Engine (Statutory Offline Mode)",
+            "scene_type": "Software Architecture Diagram / Technical Schematic",
+            "risk_level": "SAFE",
+            "confidence_score": 0.99,
+            "geotechnical_analysis": {
+                "detected": False,
+                "fracture_intensity": "None",
+                "water_seepage": "None",
+                "roof_support_condition": "Not Applicable",
+                "rmr_estimate": "N/A (Non-Mining Image)",
+                "hazards_found": [],
+            },
+            "ppe_compliance": {
+                "detected": False,
+                "helmet_detected": False,
+                "high_vis_vest_detected": False,
+                "violations": [],
+            },
+            "dgms_statutory_reference": "N/A (Digital Technical Schematic)",
+            "immediate_actions": [
+                "No mining hazards: Uploaded image is a software architecture diagram or technical schematic.",
+                "To perform geotechnical strata or PPE compliance audits, upload an actual underground or opencast mine photograph.",
+            ],
+            "summary": "The uploaded image depicts a software architecture diagram or digital schematic, not a mining or geotechnical work site. No physical hazards or PPE violations apply.",
+        }
 
     # Keyword checks
     is_explicit_safe = any(k in fname_lower for k in ["safe", "normal", "compliant", "good", "clear", "intact", "arch"])
