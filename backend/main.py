@@ -3,7 +3,11 @@ import io
 import os
 import sqlite3
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import requests
 from bs4 import BeautifulSoup

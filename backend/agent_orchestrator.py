@@ -25,6 +25,15 @@ if OPENAI_API_KEY:
     except Exception:  # noqa: BLE001
         openai_client = None
 
+google_genai_client = None
+if GOOGLE_API_KEY:
+    try:
+        from google import genai
+
+        google_genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+    except Exception:  # noqa: BLE001
+        google_genai_client = None
+
 try:
     from telemetry_service import telemetry_manager
 except ImportError:
@@ -203,14 +212,37 @@ Provide a direct, authoritative safety response with:
             final_text = None
 
     if not final_text and GOOGLE_API_KEY:
-        try:
-            import google.generativeai as legacy_genai
+        # 1. Modern google.genai SDK
+        if google_genai_client and hasattr(google_genai_client, "models"):
+            for m in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                try:
+                    resp = google_genai_client.models.generate_content(
+                        model=m,
+                        contents=prompt
+                    )
+                    if resp.text:
+                        final_text = resp.text.strip()
+                        break
+                except Exception:
+                    continue
 
-            model = legacy_genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(prompt)
-            final_text = response.text.strip()
-        except Exception:  # noqa: BLE001
-            final_text = None
+        # 2. Legacy google.generativeai SDK fallback
+        if not final_text:
+            try:
+                import google.generativeai as legacy_genai
+
+                legacy_genai.configure(api_key=GOOGLE_API_KEY)
+                for m in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                    try:
+                        model = legacy_genai.GenerativeModel(m)
+                        response = model.generate_content(prompt)
+                        if response.text:
+                            final_text = response.text.strip()
+                            break
+                    except Exception:
+                        continue
+            except Exception:  # noqa: BLE001
+                final_text = None
 
     if not final_text:
         final_text = _format_offline_agent_response(

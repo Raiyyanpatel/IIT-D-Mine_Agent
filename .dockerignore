@@ -1,0 +1,30 @@
+# Ignore git and IDE files
+.git
+.gitignore
+.ruff_cache
+.vscode
+.idea
+
+# Ignore python virtual environments and cache
+backend/venv/
+backend/.venv/
+venv/
+.venv/
+__pycache__/
+*/__pycache__/
+*/*.pyc
+*.pyo
+*.pyd
+
+# Ignore node dependencies and local builds
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/
+
+# Ignore local environment files and local database caches
+.env
+backend/.env
+frontend/.env
+*.db
+rag_cache.db

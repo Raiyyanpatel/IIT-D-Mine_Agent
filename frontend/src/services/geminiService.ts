@@ -1,13 +1,33 @@
-// Backend API Service for Digital Mine Safety Officer (Agentic & Multimodal AI)
+function getBackendUrl(): string {
+  if (typeof window === 'undefined') {
+    return (import.meta as any).env?.VITE_BACKEND_URL || '';
+  }
 
-const isLocalDev = typeof window !== 'undefined' && 
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 
-  window.location.port !== '8000';
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const envUrl = (import.meta as any).env?.VITE_BACKEND_URL;
 
-const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL !== undefined
-  ? (import.meta as any).env.VITE_BACKEND_URL
-  : (isLocalDev ? 'http://localhost:8000' : '');
+  // In production (not localhost), always use relative URL or remote env URL (never localhost)
+  if (!isLocalHost) {
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl;
+    }
+    return ''; // Same origin
+  }
 
+  // In local dev
+  if (envUrl !== undefined && envUrl !== '') {
+    return envUrl;
+  }
+
+  // If running Vite dev server on port other than 8000, target 8000
+  if (window.location.port !== '8000') {
+    return 'http://localhost:8000';
+  }
+
+  return '';
+}
+
+const BACKEND_URL = getBackendUrl();
 const FALLBACK_URL = (import.meta as any).env?.VITE_FALLBACK_URL || 'https://krishnasimha-mine-agent.hf.space';
 
 async function fetchWithFallback(endpoint: string, options: RequestInit) {
@@ -16,10 +36,16 @@ async function fetchWithFallback(endpoint: string, options: RequestInit) {
     if (res.ok) return await res.json();
     throw new Error(`Primary backend returned status: ${res.status}`);
   } catch (err) {
-    // Try fallback cloud space
-    const res = await fetch(`${FALLBACK_URL}${endpoint}`, options);
-    if (!res.ok) throw new Error(`Fallback backend status: ${res.status}`);
-    return await res.json();
+    // Try fallback cloud space only if different from BACKEND_URL
+    if (FALLBACK_URL && FALLBACK_URL !== BACKEND_URL) {
+      try {
+        const res = await fetch(`${FALLBACK_URL}${endpoint}`, options);
+        if (res.ok) return await res.json();
+      } catch (fallbackErr) {
+        console.warn('Fallback backend unreachable:', fallbackErr);
+      }
+    }
+    throw err;
   }
 }
 

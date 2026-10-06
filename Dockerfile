@@ -12,7 +12,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Python Backend & Static Asset Serving
-FROM python:3.10-slim
+FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     build-essential \
     libgl1 \

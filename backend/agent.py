@@ -12,6 +12,10 @@ except ImportError:
     )
 
 import pickle
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import google.generativeai as genai
 import numpy as np
@@ -154,13 +158,13 @@ Answer concisely, factually, and directly.
             pass
 
     if GOOGLE_API_KEY:
-        try:
-            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
-                prompt
-            )
-            return response.text
-        except Exception:  # noqa: BLE001, S110
-            pass
+        for m in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+            try:
+                response = genai.GenerativeModel(m).generate_content(prompt)
+                if response.text:
+                    return response.text
+            except Exception:  # noqa: BLE001, S110
+                continue
 
     context_preview = (
         "\n- ".join(context_docs[:3]) if context_docs else "No direct DGMS match."
