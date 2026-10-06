@@ -365,6 +365,8 @@ if not static_dir.exists():
 if static_dir.exists() and (static_dir / "index.html").exists():
     if (static_dir / "assets").exists():
         app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="static_assets")
+    if (static_dir / "samples").exists():
+        app.mount("/samples", StaticFiles(directory=str(static_dir / "samples")), name="samples")
 
     @app.get("/")
     @app.get("/{full_path:path}")

@@ -17,13 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { inspectMineImage } from '../services/geminiService';
 
 export const VisionInspectorScreen: React.FC = () => {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [analyzing, setAnalyzing] = useState<boolean>(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const [activeSample, setActiveSample] = useState<string | null>(null);
-
-  // Sample presets for quick testing
+  // Real high-resolution mining photography presets for geotechnical & PPE audits
   const presets = [
     {
       id: 'highwall_crack',
@@ -31,16 +25,15 @@ export const VisionInspectorScreen: React.FC = () => {
       category: 'Geotechnical (Opencast)',
       filename: 'opencast_bench3_tension_crack.jpg',
       description: 'Opencast Bench 3 displaying sub-vertical tension fractures and crest seepage.',
-      // Simple 1x1 colored data URL to represent image
-      dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380" viewBox="0 0 600 380"><rect width="600" height="380" fill="%231e293b"/><path d="M100 50 L250 200 L240 280 L350 360" stroke="%23ef4444" stroke-width="4" stroke-dasharray="8 4" fill="none"/><rect x="230" y="190" width="120" height="40" fill="%23ef4444" rx="4"/><text x="240" y="215" fill="white" font-family="sans-serif" font-size="12" font-weight="bold">CRACK > 18mm</text><text x="30" y="40" fill="%2394a3b8" font-family="sans-serif" font-size="14">OPENCAST BENCH 3 - HIGHWALL PROFILE</text></svg>'
+      imageUrl: '/samples/highwall_crack.jpg',
     },
     {
       id: 'roof_sag',
-      name: 'Underground Roof Sag',
+      name: 'Underground Roof Sag & Strata Fracture',
       category: 'Strata Control',
       filename: 'underground_face_roof_sag.jpg',
       description: 'Underground Longwall gate road exhibiting delamination and bed separation.',
-      dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380" viewBox="0 0 600 380"><rect width="600" height="380" fill="%230f172a"/><path d="M50 80 Q 300 160 550 80" stroke="%23f59e0b" stroke-width="6" fill="none"/><rect x="220" y="170" width="160" height="40" fill="%23f59e0b" rx="4"/><text x="230" y="195" fill="black" font-family="sans-serif" font-size="12" font-weight="bold">ROOF SAG: 4.8mm</text><text x="30" y="40" fill="%2394a3b8" font-family="sans-serif" font-size="14">DISTRICT 2 - ROOF BOLTING GRID</text></svg>'
+      imageUrl: '/samples/roof_sag.jpg',
     },
     {
       id: 'ppe_audit',
@@ -48,9 +41,23 @@ export const VisionInspectorScreen: React.FC = () => {
       category: 'Human Safety & PPE',
       filename: 'shaft_bank_workers_ppe.jpg',
       description: 'CCTV snapshot of underground personnel assembly during shift interchange.',
-      dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380" viewBox="0 0 600 380"><rect width="600" height="380" fill="%2318181b"/><circle cx="200" cy="180" r="40" fill="%233b82f6"/><rect x="175" y="130" width="50" height="20" fill="%23eab308" rx="5"/><rect x="150" y="240" width="100" height="30" fill="%23ef4444" rx="4"/><text x="160" y="260" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">MISSING VEST</text><text x="30" y="40" fill="%2394a3b8" font-family="sans-serif" font-size="14">CCTV SHAFT 1 - SHIFT DESCENT</text></svg>'
-    }
+      imageUrl: '/samples/ppe_audit.jpg',
+    },
+    {
+      id: 'safe_gallery',
+      name: 'Compliant Supported Gallery',
+      category: 'Statutory Compliance (Safe)',
+      filename: 'safe_supported_gallery_normal.jpg',
+      description: 'Exemplary underground roadway with systematic steel arches and 100% PPE.',
+      imageUrl: '/samples/safe_gallery.jpg',
+    },
   ];
+
+  const [selectedImage, setSelectedImage] = useState<string | null>(presets[0].imageUrl);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [analyzing, setAnalyzing] = useState<boolean>(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [activeSample, setActiveSample] = useState<string | null>(presets[0].id);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -67,8 +74,9 @@ export const VisionInspectorScreen: React.FC = () => {
 
   const handleSelectPreset = (preset: typeof presets[0]) => {
     setActiveSample(preset.id);
-    setSelectedImage(preset.dataUrl);
+    setSelectedImage(preset.imageUrl);
     setImageFile(null);
+    setAnalysisResult(null);
   };
 
   const runInspection = async () => {
@@ -82,7 +90,14 @@ export const VisionInspectorScreen: React.FC = () => {
         result = await inspectMineImage(imageFile);
       } else if (selectedImage) {
         const activePreset = presets.find(p => p.id === activeSample);
-        result = await inspectMineImage(selectedImage, activePreset?.filename || 'inspection.jpg');
+        if (selectedImage.startsWith('/samples/') || selectedImage.startsWith('http')) {
+          const res = await fetch(selectedImage);
+          const blob = await res.blob();
+          const file = new File([blob], activePreset?.filename || 'mine_inspection.jpg', { type: blob.type || 'image/jpeg' });
+          result = await inspectMineImage(file);
+        } else {
+          result = await inspectMineImage(selectedImage, activePreset?.filename || 'inspection.jpg');
+        }
       }
       setAnalysisResult(result);
     } catch (err) {
@@ -123,7 +138,7 @@ export const VisionInspectorScreen: React.FC = () => {
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
           Select Sample Mine Image or Upload Custom Photo:
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {presets.map((preset) => (
             <button
               key={preset.id}
