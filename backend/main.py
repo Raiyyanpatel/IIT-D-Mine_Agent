@@ -354,6 +354,17 @@ async def generate_audit_report_pdf(request: Request):
     return FileResponse(path=filename, filename=filename, media_type="application/pdf")
 
 
+# Mount frontend static assets if available (Full-stack container deployment)
+from fastapi.staticfiles import StaticFiles
+
+static_dir = _BACKEND_DIR / "static"
+if not static_dir.exists():
+    static_dir = _BACKEND_DIR.parent / "frontend" / "dist"
+
+if static_dir.exists() and (static_dir / "index.html").exists():
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
+
 if __name__ == "__main__":
     import uvicorn
 
